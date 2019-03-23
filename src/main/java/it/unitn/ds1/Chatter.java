@@ -6,9 +6,11 @@ import java.io.Serializable;
 import akka.actor.Props;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.lang.Thread;
 import java.lang.InterruptedException;
 import java.util.Collections;
+import java.util.Iterator;
 
 class Chatter extends AbstractActor {
 
@@ -16,6 +18,7 @@ class Chatter extends AbstractActor {
   final static int N_MESSAGES = 5;
   private Random rnd = new Random();
   private List<ActorRef> group; // the list of peers (the multicast group)
+  private List<ChatMsg> buffer = new ArrayList<>(); //message buffer
   private int sendCount = 0;    // number of sent messages
   private String myTopic;  // The topic I am interested in, null if no topic
   private final int id;    // ID of the current actor
@@ -70,6 +73,7 @@ class Chatter extends AbstractActor {
   /* -- Actor behaviour ----------------------------------------------------- */
   private void sendChatMsg(String topic, int n) {
     sendCount++;
+    this.vc[this.id]++; //increment the vector clock element of the current actor
     ChatMsg m = new ChatMsg(topic, n, this.id, this.vc);
     System.out.printf("%02d: %s%02d\n", this.id, topic, n);
     multicast(m);
@@ -119,10 +123,59 @@ class Chatter extends AbstractActor {
   }
 
   private void onChatMsg(ChatMsg msg) {
-    deliver(msg);  // "deliver" the message to the simulated chat user
+	  if(canDeliver(msg)) { // if I can deliver		  
+		  updateVC(msg); // update my own vector clock
+		  deliver(msg);  // "deliver" the message to the simulated chat user
+		  ChatMsg m = extractDeliverable();
+		  if (m != null) {
+			  onChatMsg(m);
+		  }
+	  }else { // I cannot deliver the message so put it on the buffer	
+		  buffer.add(msg);
+	  }
   }
 
-  private void deliver(ChatMsg m) {
+  private ChatMsg extractDeliverable() {
+	  Iterator<ChatMsg> I = buffer.iterator();
+	  while(I.hasNext()) {
+		  ChatMsg m = I.next();
+		  if(canDeliver(m)) {
+			  I.remove();
+			  return m;
+		  }
+	  }
+	  return null;
+}
+
+private void updateVC(ChatMsg msg) {
+	  int[] vcS = msg.vc;
+	  int[] vcR = this.vc;
+	  for (int i=0; i<vcS.length; i++) {
+		  vcR[i] = Math.max(vcR[i], vcS[i]);
+	  }
+}
+
+private boolean canDeliver(ChatMsg msg) {
+	  int[] vcS = msg.vc;
+	  int[] vcR = this.vc;
+	  int senderId = msg.senderId;
+	  if(vcS[senderId] == vcR[senderId] + 1 && checkSecondCondition(senderId, vcS, vcR)) {
+		  return true;
+	  }
+	  return false;
+}
+
+private boolean checkSecondCondition(int senderId, int[] vcS, int[] vcR) {
+	
+	for (int i=0; i<vcS.length; i++) {
+		if (i!=senderId && vcS[i] > vcR[i]) {
+			return false;		
+		}
+	}
+	return true;
+}
+
+private void deliver(ChatMsg m) {
     // Our "chat application" appends all the received messages to the
     // chatHistory and replies if the topic of the message is interesting
     appendToHistory(m);
@@ -141,5 +194,16 @@ class Chatter extends AbstractActor {
 
   private void printHistory(PrintHistoryMsg msg) {
     System.out.printf("%02d: %s\n", this.id, chatHistory);
+    
+    /*Iterator<ChatMsg> I = buffer.iterator();
+    System.out.printf("buffer size: %d\n", buffer.size());
+	while(I.hasNext()) {
+		ChatMsg m = I.next();
+		if (m != null) {
+			System.out.printf("%d %s %d\n", m.senderId, m.topic, m.n);
+		} else {
+			System.out.print("buffer is null");
+		}	
+	}*/
   }
 }

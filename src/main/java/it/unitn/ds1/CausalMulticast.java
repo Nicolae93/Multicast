@@ -32,7 +32,7 @@ public class CausalMulticast {
     group.add(system.actorOf(
           Chatter.props(id++, "a"), // this one will catch up the topic "a"
           "chatter1"));
-    /*
+    
     group.add(system.actorOf(
           Chatter.props(id++, "b"), // this one will catch up the topic "b"
           "chatter2"));
@@ -40,7 +40,7 @@ public class CausalMulticast {
     group.add(system.actorOf(
           Chatter.props(id++, "b"), // this one will catch up the topic "b"
           "chatter3"));
-	*/
+	
     // the rest are silent listeners: they don't have topics to discuss
     for (int i=0; i<N_LISTENERS; i++) {
       group.add(system.actorOf(Chatter.props(id++, null), "listener" + i));
@@ -57,7 +57,7 @@ public class CausalMulticast {
 
     // tell the first chatter to start conversation
     group.get(0).tell(new StartChatMsg(), null);
-    //group.get(2).tell(new StartChatMsg(), null);
+    group.get(2).tell(new StartChatMsg(), null);
     
     try {
       System.out.println(">>> Wait for the chats to stop and press ENTER <<<");
